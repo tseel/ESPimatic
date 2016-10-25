@@ -102,6 +102,38 @@ $( document ).ready(function() {
 				$("#errorblock4").show();
 				$.ajax({type: "GET",data: {action:"clearerror",value:"upgrade"},url: "/api",cache: false})
 			}
+			if (values[13] == "1")
+			{
+				$("input[name=relay1_initialState]").prop("checked", true);
+			}
+			if (values[13] == "0" || values[13] == "")
+			{
+				$("input[name=relay1_initialState]").prop("checked", false);
+			}
+			if (values[14] == "1")
+			{
+				$("input[name=relay2_initialState]").prop("checked", true);
+			}
+			if (values[14] == "0" || values[14] == "")
+			{
+				$("input[name=relay2_initialState]").prop("checked", false);
+			}
+			if (values[15] == "1")
+			{
+				$("input[name=relay3_initialState]").prop("checked", true);
+			}
+			if (values[15] == "0" || values[15] == "")
+			{
+				$("input[name=relay3_initialState]").prop("checked", false);
+			}
+			if (values[16] == "1")
+			{
+				$("input[name=relay4_initialState]").prop("checked", true);
+			}
+			if (values[16] == "0" || values[16] == "")
+			{
+				$("input[name=relay4_initialState]").prop("checked", false);
+			}
 		} 
 	});
 	};
@@ -232,66 +264,98 @@ $( document ).ready(function() {
             <form id="relay_form" action="#" method="POST" style="display: none;">
                <div class="panel panel-default">
                   <div class="panel-body">
-                     <input type="hidden" name="form" value="relay">
-                     <div class="form-group">
+                    <input type="hidden" name="form" value="relay">
+                    <div class="form-group">
                         <div class="input-group"><span class="input-group-addon">Enable </span><span class="form-control"><input type="checkbox" name="relay_bool"> </span></div>
-                     </div>
-                     <div class="form-group">
+                    </div>
+                    <div class="form-group">
                         <div class="input-group">
-                           <span class="input-group-addon">Pin relay 1</span>
+                           <span class="input-group-addon">Relay 1 PIN</span>
                            <select class="form-control" name="relay1_pin" id="relay1_pin">
                            </select>
                         </div>
 					</div>
-                     <div class="form-group">
+                    <div class="form-group">
                         <div class="input-group">
-                           <span class="input-group-addon"> Relay 1 type</span>
+                           <span class="input-group-addon">Relay 1 type</span>
                            <select class="form-control" name="relay1_type" id="relay1_type">
                            </select>
                         </div>
 					</div>
-                     <div class="form-group">
+                    <div class="form-group">
                         <div class="input-group">
-                           <span class="input-group-addon">Pin relay 2</span>
+						    <span class="input-group-addon">Relay 1 initial state</span>
+							<span class="form-control">
+							    <input type="checkbox" name="relay1_initialState">
+							</span>
+						</div>
+                    </div>
+                    <div class="form-group">
+                        <div class="input-group">
+                           <span class="input-group-addon">Relay 2 PIN</span>
                            <select class="form-control" name="relay2_pin" id="relay2_pin">
                            </select>
                         </div>
 					</div>
-                     <div class="form-group">
+                    <div class="form-group">
                         <div class="input-group">
-                           <span class="input-group-addon"> Relay 2 type</span>
+                           <span class="input-group-addon">Relay 2 type</span>
                            <select class="form-control" name="relay2_type" id="relay2_type">
                            </select>
                         </div>
 					</div>
-                     <div class="form-group">
+                    <div class="form-group">
                         <div class="input-group">
-                           <span class="input-group-addon">Pin relay 3</span>
+						    <span class="input-group-addon">Relay 2 initial state</span>
+							<span class="form-control">
+							    <input type="checkbox" name="relay2_initialState">
+							</span>
+						</div>
+                    </div>
+                    <div class="form-group">
+                        <div class="input-group">
+                           <span class="input-group-addon">Relay 3 PIN</span>
                            <select class="form-control" name="relay3_pin" id="relay3_pin">
                            </select>
                         </div>
 					</div>
-                     <div class="form-group">
+                    <div class="form-group">
                         <div class="input-group">
-                           <span class="input-group-addon"> Relay 3 type</span>
+                           <span class="input-group-addon">Relay 3 type</span>
                            <select class="form-control" name="relay3_type" id="relay3_type">
                            </select>
                         </div>
 					</div>
-                     <div class="form-group">
+                    <div class="form-group">
                         <div class="input-group">
-                           <span class="input-group-addon">Pin relay 4</span>
+						    <span class="input-group-addon">Relay 3 initial state</span>
+							<span class="form-control">
+							    <input type="checkbox" name="relay3_initialState">
+							</span>
+						</div>
+                    </div>
+                    <div class="form-group">
+                        <div class="input-group">
+                           <span class="input-group-addon">Relay 4 PIN</span>
                            <select class="form-control" name="relay4_pin" id="relay4_pin">
                            </select>
                         </div>
 					</div>
-                     <div class="form-group">
+                    <div class="form-group">
                         <div class="input-group">
-                           <span class="input-group-addon"> Relay 4 type</span>
+                           <span class="input-group-addon">Relay 4 type</span>
                            <select class="form-control" name="relay4_type" id="relay4_type">
                            </select>
                         </div>
 					</div>
+                    <div class="form-group">
+                        <div class="input-group">
+						    <span class="input-group-addon">Relay 4 initial state</span>
+							<span class="form-control">
+							    <input type="checkbox" name="relay4_initialState">
+							</span>
+						</div>
+                    </div>
                   </div>
                   <div class="panel-footer clearfix">
                      <div class="pull-right"><button type="submit" class="btn btn-default">Send</button></div>
