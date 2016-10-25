@@ -1,12 +1,13 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
 #include <EEPROM.h>
 #include <SPI.h>
 #include "LedControlSPIESP8266.h"
-#include <Base64.h>
+#include "Base64.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <IRremoteESP8266.h>
+#include "IRremoteESP8266.h"
 #include "DHT.h"
 #include <FS.h>
 
@@ -169,7 +170,8 @@ WiFiServer telnet(23);
 WiFiClient serverClients[MAX_SRV_CLIENTS];
 
 
-ESP8266WebServer  server(80);
+ESP8266WebServer server(80);
+MDNSResponder mdns;
 WiFiClient client;
 
 
@@ -512,6 +514,9 @@ void setup()
       Serial.println(ssidStored);
       Serial.print("IP address: ");
       Serial.println(WiFi.localIP());
+      Serial.print("Hostname: ");
+      Serial.println(DeviceName);
+      
       if (MatrixEnabled == "1")
       {
         // Display 'OK' on LED's
@@ -521,6 +526,14 @@ void setup()
     }
   }
 
+  /* Activate the mdns */
+  if (!mdns.begin(DeviceName.c_str(), WiFi.localIP())) {
+    Serial.println("Error setting up MDNS responder!");
+    while(1) { 
+      delay(1000);
+    }
+  }
+ 
   String RelayEnabled = HandleEeprom(enablerelay_Address, "read");
   if (RelayEnabled == "1")
   {
