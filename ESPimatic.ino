@@ -2321,7 +2321,7 @@ void send_data(String data, String sensor)
   const char* Portchar = PimaticPortStored.c_str();
   if (!client.connect(PimaticHostStored.c_str(), PimaticPortStored.toInt()))
   {
-    Serial.println("connection failed");
+    Serial.println("Connection to pimatic host failed");
     return;
   }
 
@@ -2491,7 +2491,7 @@ String get_ds18b20()
 
 void loop (void)
 {
-  if (millis() - ds18b20_lastInterval > ds18b20_sendInterval && DS18B20Enabled == "1")
+  if ((DS18B20Enabled == "1") && (millis() - ds18b20_lastInterval > ds18b20_sendInterval))
   {
     String temp = get_ds18b20();
     String ds18b20_var = HandleEeprom(ds18b20var_Address, "read");
@@ -2499,7 +2499,7 @@ void loop (void)
     ds18b20_lastInterval = millis();    
   }
   
-  if (millis() - dht_lastInterval > dht_sendInterval && DHTEnabled == "1")
+  if ((DHTEnabled == "1") && (millis() - dht_lastInterval > dht_sendInterval))
   {
     String dhttemp_var = HandleEeprom(dhttempvar_Address, "read");
     String dhthum_var = HandleEeprom(dhthumvar_Address, "read");
@@ -2522,7 +2522,7 @@ void loop (void)
     dht_lastInterval = millis();
   }
 
-  if (millis() - adc_lastInterval > adc_sendInterval && ADCEnabled == "1")
+  if ((ADCEnabled == "1") && (millis() - adc_lastInterval > adc_sendInterval))
   {
     ADC = analogRead(A0);
     String adc_var = HandleEeprom(adcvar_Address, "read");
@@ -2530,7 +2530,7 @@ void loop (void)
     adc_lastInterval = millis();    
   }
 
-  if (millis() - kwhint_lastInterval > kwhint_sendInterval && kwhintEnabled == "1")
+  if ((kwhintEnabled == "1") && (millis() - kwhint_lastInterval > kwhint_sendInterval))
   {
     String kwhint_var = HandleEeprom(kwhintvar_Address, "read");
     send_data(String(curWatts), kwhint_var);
