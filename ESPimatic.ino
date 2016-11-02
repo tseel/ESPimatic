@@ -2565,6 +2565,9 @@ String get_ds18b20()
 
 void loop (void)
 {
+  // Check for any mDNS queries and send responses
+  mdns.update();
+
   if ((DS18B20Enabled == "1") && (millis() - ds18b20_lastInterval > ds18b20_sendInterval))
   {
     String temp = get_ds18b20();
