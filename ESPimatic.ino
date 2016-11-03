@@ -30,14 +30,39 @@ String formatBytes(size_t bytes) {
   }
 }
 
+#define CONFIG_VERSION "0.1"
+#define DEBUG
+
+#ifdef DEBUG
+ #define DEBUG_PRINT(x)  Serial.println (x)
+#else
+ #define DEBUG_PRINT(x)
+#endif
+
+// constants
+const int relayCount = 4;
+const int gpioCount = 16;
+
+
 struct relayStruct
 {
   String name;
-  String pin;
-  String pin2;
-  String initialState;
-  String type;
-  String state;
+  int pin;
+  int pin2;
+  bool initialState;
+  int type;
+  bool state;
+};
+
+struct relayStruct defaultRelay = {"", -1, -1, 0, 0, 0};
+struct relayStoreStruct
+{
+  bool enabled;
+  struct relayStruct relays[relayCount];
+} relayStorage =
+{
+  0,
+  {defaultRelay, defaultRelay, defaultRelay, defaultRelay}
 };
 
 struct rcSocketStruct
@@ -142,8 +167,12 @@ unsigned long pulseTimeS = 0;
 #define relay2InitialState_Address 563
 #define relay3InitialState_Address 564
 #define relay4InitialState_Address 565
-int EepromAdress[] = {ssid_Address, password_Address, pimhost_Address, pimport_Address, pimuser_Address, pimpass_Address, enablematrix_Address, matrixpin_Address, enableds18b20_Address, ds18b20pin_Address, enabledht_Address, dhttype_Address, dhtpin_Address, enabledsleep_Address, ds18b20var_Address, ds18b20interval_Address, ds18b20resolution_Address, enableir_Address, irpin_Address, enablerelay_Address, relay1pin_Address, relay2pin_Address, relay3pin_Address, dhttempvar_Address, dhthumvar_Address, dhtinterval_Address, relay4pin_Address, eeprommd5_Address, version_Address, availablegpio_Address, showonmatrix_Address, matrixintensity_Address, relay1type_Address, relay2type_Address, relay3type_Address, relay4type_Address, devicename_Address, webuser_Address, webpass_Address, enablewebauth_Address, espimaticapikey_Address, bslocal_Address, enableadc_Address, adcinterval_Address, adcvar_Address, enableled_Address, led1pin_Address, led2pin_Address, led3pin_Address, dsleepaction_Address, kwhintenable_Address, kwhintpin_Address, kwhintinterval_Address, kwhintc_Address, kwhintvar_Address, dsleepinterval_Address, dsleepbackdoor_Address, relay1InitialState_Address, relay2InitialState_Address, relay3InitialState_Address, relay4InitialState_Address};
-int EepromLength[] = {31, 65, 32, 5, 11, 20, 1, 2, 1, 2, 1, 1, 2, 1, 30, 2, 2, 1, 2, 1, 2, 2, 2, 30, 30, 2, 2, 32, 8, 17, 1, 2, 1, 1 , 1 , 1, 30, 25, 25, 1, 15, 1, 1, 2, 30, 1, 2, 2, 2, 2, 1, 2, 2, 5, 30, 2, 30, 1, 1, 1, 1};
+#define relay1pin2_Address 566
+#define relay2pin2_Address 568
+#define relay3pin2_Address 570
+#define relay4pin2_Address 572
+int EepromAdress[] = {ssid_Address, password_Address, pimhost_Address, pimport_Address, pimuser_Address, pimpass_Address, enablematrix_Address, matrixpin_Address, enableds18b20_Address, ds18b20pin_Address, enabledht_Address, dhttype_Address, dhtpin_Address, enabledsleep_Address, ds18b20var_Address, ds18b20interval_Address, ds18b20resolution_Address, enableir_Address, irpin_Address, enablerelay_Address, relay1pin_Address, relay2pin_Address, relay3pin_Address, dhttempvar_Address, dhthumvar_Address, dhtinterval_Address, relay4pin_Address, eeprommd5_Address, version_Address, availablegpio_Address, showonmatrix_Address, matrixintensity_Address, relay1type_Address, relay2type_Address, relay3type_Address, relay4type_Address, devicename_Address, webuser_Address, webpass_Address, enablewebauth_Address, espimaticapikey_Address, bslocal_Address, enableadc_Address, adcinterval_Address, adcvar_Address, enableled_Address, led1pin_Address, led2pin_Address, led3pin_Address, dsleepaction_Address, kwhintenable_Address, kwhintpin_Address, kwhintinterval_Address, kwhintc_Address, kwhintvar_Address, dsleepinterval_Address, dsleepbackdoor_Address, relay1InitialState_Address, relay2InitialState_Address, relay3InitialState_Address, relay4InitialState_Address, relay1pin2_Address, relay2pin2_Address, relay3pin2_Address, relay4pin2_Address};
+int EepromLength[] = {31, 65, 32, 5, 11, 20, 1, 2, 1, 2, 1, 1, 2, 1, 30, 2, 2, 1, 2, 1, 2, 2, 2, 30, 30, 2, 2, 32, 8, 17, 1, 2, 1, 1 , 1 , 1, 30, 25, 25, 1, 15, 1, 1, 2, 30, 1, 2, 2, 2, 2, 1, 2, 2, 5, 30, 2, 30, 1, 1, 1, 1, 2, 2, 2, 2};
 int StartAddress = 0;
 
 #define ErrorWifi 0
@@ -170,9 +199,6 @@ DeviceAddress insideThermometer;
 uint8_t LEDpin;
 //LedControl lc=LedControl(2,2); // Load pin, number of LED displays
 LedControl lc = LedControl(LEDpin, 2); // Load pin, number of LED displays
-
-// relay config
-int relayCount = 4;
 
 // RC switch config
 RCSwitch rcSwitch = RCSwitch();
@@ -381,9 +407,9 @@ void EepromMD5()
 
 int GetInitialRelayValue(struct relayStruct r)
 {
-  if (r.type == "0") //
+  if (r.type == 0) //
   {
-    if (r.initialState == "1")
+    if (r.initialState)
     {
       return LOW;
     }
@@ -392,290 +418,218 @@ int GetInitialRelayValue(struct relayStruct r)
       return HIGH;
     }
   }
-  else
+  else if (r.type == 1)
   {
-    if (r.initialState == "1")
+    if (r.initialState)
     {
       return HIGH;
     }
     else
     {
       return LOW;
+    }
+  }
+  else if (r.type == 2)
+  {
+    if (r.initialState)
+    {
+      return LOW;
+    }
+    else
+    {
+      return HIGH;
     }
   }
 }
 
 struct relayStruct getRelayData(int index) {
+  int pinAddress          = 0;
+  int pin2Address         = 0;
+  int typeAddress         = 0;
+  int initialStateAddress = 0;
+
   struct relayStruct r;
 
   if (index == 1)
   {
-    r.pin          = HandleEeprom(relay1pin_Address, "read");
-    r.type         = HandleEeprom(relay1type_Address, "read");
-    r.initialState = HandleEeprom(relay1InitialState_Address, "read");
-  }
-  else if (index == 2)
-  {
-    r.pin          = HandleEeprom(relay2pin_Address, "read");
-    r.type         = HandleEeprom(relay2type_Address, "read");
-    r.initialState = HandleEeprom(relay2InitialState_Address, "read");
-  }
-  else if (index == 3)
-  {
-    r.pin          = HandleEeprom(relay3pin_Address, "read");
-    r.type         = HandleEeprom(relay3type_Address, "read");
-    r.initialState = HandleEeprom(relay3InitialState_Address, "read");
-  }
-  else if (index == 4)
-  {
-    r.pin          = HandleEeprom(relay4pin_Address, "read");
-    r.type         = HandleEeprom(relay4type_Address, "read");
-    r.initialState = HandleEeprom(relay4InitialState_Address, "read");
-  };
-
-  return r;
-}
-
-void setRelayData(struct relayStruct r, int index) {
-  int pinAddress          = 0;
-  int typeAddress         = 0;
-  int initialStateAddress = 0;
-
-  if (index == 1)
-  {
     pinAddress          = relay1pin_Address;
+    pin2Address         = relay1pin2_Address;
     typeAddress         = relay1type_Address;
     initialStateAddress = relay1InitialState_Address;
   }
   else if (index == 2)
   {
     pinAddress          = relay2pin_Address;
+    pin2Address         = relay2pin2_Address;
     typeAddress         = relay2type_Address;
     initialStateAddress = relay2InitialState_Address;
   }
   else if (index == 3)
   {
     pinAddress          = relay3pin_Address;
+    pin2Address         = relay3pin2_Address;
     typeAddress         = relay3type_Address;
     initialStateAddress = relay3InitialState_Address;
   }
   else if (index == 4)
   {
     pinAddress          = relay4pin_Address;
+    pin2Address         = relay4pin2_Address;
+    typeAddress         = relay4type_Address;
+    initialStateAddress = relay4InitialState_Address;
+  }
+  else
+    return r;
+
+  String relayPin = HandleEeprom(pinAddress, "read");
+  r.pin          = relayPin.toInt();
+  String relayPin2 = HandleEeprom(pin2Address, "read");
+  r.pin2         = relayPin2.toInt();
+  String relayType = HandleEeprom(typeAddress, "read");
+  r.type         = relayType.toInt();
+  String relayInitialState = HandleEeprom(initialStateAddress, "read");
+  r.initialState = relayInitialState.toInt();
+
+  return r;
+}
+
+void setRelayData(struct relayStruct r, int index) {
+  int pinAddress          = 0;
+  int pin2Address         = 0;
+  int typeAddress         = 0;
+  int initialStateAddress = 0;
+
+  if (index == 1)
+  {
+    pinAddress          = relay1pin_Address;
+    pin2Address         = relay1pin2_Address;
+    typeAddress         = relay1type_Address;
+    initialStateAddress = relay1InitialState_Address;
+  }
+  else if (index == 2)
+  {
+    pinAddress          = relay2pin_Address;
+    pin2Address         = relay2pin2_Address;
+    typeAddress         = relay2type_Address;
+    initialStateAddress = relay2InitialState_Address;
+  }
+  else if (index == 3)
+  {
+    pinAddress          = relay3pin_Address;
+    pin2Address         = relay3pin2_Address;
+    typeAddress         = relay3type_Address;
+    initialStateAddress = relay3InitialState_Address;
+  }
+  else if (index == 4)
+  {
+    pinAddress          = relay4pin_Address;
+    pin2Address         = relay4pin2_Address;
     typeAddress         = relay4type_Address;
     initialStateAddress = relay4InitialState_Address;
   }
   else
     return;
 
-  HandleEeprom(pinAddress, "write", r.pin);
-  HandleEeprom(typeAddress, "write", r.type);
-  HandleEeprom(initialStateAddress, "write", r.initialState);
+  HandleEeprom(pinAddress, "write", String(r.pin));
+  HandleEeprom(pin2Address, "write", String(r.pin2));
+  HandleEeprom(typeAddress, "write", String(r.type));
+  HandleEeprom(initialStateAddress, "write", String(r.initialState));
 }
 
-void setup()
-{
-  Serial.begin(115200);
-  delay(500);
-  int SizeOfArr = (sizeof(EepromAdress) / 4 ) - 1 ;
-  int eeprom_alloc = EepromAdress[SizeOfArr] + EepromLength[SizeOfArr];
-  EEPROM.begin(eeprom_alloc);
+void loadRelayData() {
+  Serial.println("Loading relay data");
+  String relay_enabled = HandleEeprom(enablerelay_Address, "read");
+  relayStorage.enabled = relay_enabled.toInt();
 
-  String eepromVersion = HandleEeprom(version_Address, "read");
-  if (eepromVersion != ESPimaticVersion)
+  if (relayStorage.enabled)
   {
-    ErrorList[ErrorUpgrade] = 1;
-    HandleEeprom(version_Address, "write", ESPimaticVersion);
-  }
-
-  // Check if EEPROM is valid
-  int EepromStatus = CheckEeprom();
-  if (EepromStatus != 1 && ErrorList[ErrorUpgrade] != 1)
-  {
-    ErrorList[ErrorEeprom] = 1;
-  }
-
-  // Check if SPIFFS is OK
-  if (!SPIFFS.begin())
-  {
-    Serial.println("SPIFFS failed, needs formatting");
-    handleFormat();
-    delay(500);
-    ESP.restart();
-  }
-  else
-  {
-    FSInfo fs_info;
-    if (!SPIFFS.info(fs_info))
-    {
-      Serial.println("fs_info failed");
-    }
-    else
-    {
-      FSTotal = fs_info.totalBytes;
-      FSUsed = fs_info.usedBytes;
-    }
-  }
-
-  String RelayEnabled = HandleEeprom(enablerelay_Address, "read");
-  if (RelayEnabled == "1")
-  {
-    struct relayStruct relays[relayCount];
     for (int i = 0; i < relayCount; i++)
     {
-      relays[i] = getRelayData(i + 1);
-      pinMode(relays[i].pin.toInt(), OUTPUT);
-      digitalWrite(relays[i].pin.toInt(), GetInitialRelayValue(relays[i]));
-    }
-  }
-
-  BSlocal = HandleEeprom(bslocal_Address, "read");
-
-  String IREnabled = HandleEeprom(enableir_Address, "read");
-  if (IREnabled == "1")
-  {
-    irsend.begin();
-  }
-
-  DeviceName = HandleEeprom(devicename_Address, "read");
-
-  MatrixEnabled = HandleEeprom(enablematrix_Address, "read");
-  if (MatrixEnabled == "1")
-  {
-    String MatrixPin = HandleEeprom(matrixpin_Address, "read");
-    ShowOnMatrix = HandleEeprom(showonmatrix_Address, "read");
-    MatrixIntensity = HandleEeprom(matrixintensity_Address, "read");
-
-
-    LEDpin = MatrixPin.toInt();
-    lc = LedControl(LEDpin, 2);
-    /*
-      The MAX72XX is in power-saving mode on startup,
-      we have to do a wakeup call
-    */
-    lc.shutdown(0, false);
-    lc.shutdown(1, false);
-    /* Set the brightness to a medium values */
-    lc.setIntensity(0, MatrixIntensity.toInt());
-    lc.setIntensity(1, MatrixIntensity.toInt());
-    /* and clear the display */
-    lc.clearDisplay(0);
-    lc.clearDisplay(1);
-  }
-
-
-  String ssidStored = HandleEeprom(ssid_Address, "read");
-  String passStored = HandleEeprom(password_Address, "read");
-  if (ssidStored == "" || passStored == "")
-  {
-    Serial.println("No wifi configuration found, starting in AP mode");
-    Serial.println("SSID: ");
-    Serial.println(APssid);
-    Serial.println("password: ");
-    Serial.println(APpassword);
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(APssid, APpassword);
-    WMode = "AP";
-    Serial.print("Connected to ");
-    Serial.println(APssid);
-    Serial.print("IP address: ");
-    Serial.println(WiFi.softAPIP());
-    if (MatrixEnabled == "1")
-    {
-      // Display 'AP' on LED's
-      CharOnLED(30, 0);
-      CharOnLED(15, 1);
-    }
-  }
-  else
-  {
-    int i = 0;
-    int row = 0;
-    int col = 0;
-    Serial.println("Connecting to :");
-    Serial.println(ssidStored);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssidStored.c_str(), passStored.c_str());
-    while (WiFi.status() != WL_CONNECTED && i < 31 && MatrixEnabled == "1")
-    {
-      delay(1000);
-      Serial.print(".");
-      lc.setLed(0, row, col, true);
-      lc.setLed(1, row, col, true);
-      ++i;
-
-      ++row;
-      // if (col == 8) { ++col; }
-      if (row == 8) {
-        row = 0;
-        ++col;
-      }
-    }
-    while (WiFi.status() != WL_CONNECTED && i < 31 && MatrixEnabled != "0")
-    {
-      delay(1000);
-      Serial.print(".");
-      ++i;
-    }
-
-
-    if (WiFi.status() != WL_CONNECTED && i >= 30)
-    {
-      WiFi.disconnect();
-      delay(1000);
-      Serial.println("");
-      Serial.println("Couldn't connect to network :( ");
-      Serial.println("Setting up access point");
-      Serial.println("SSID: ");
-      Serial.println(APssid);
-      Serial.println("password: ");
-      Serial.println(APpassword);
-      WiFi.mode(WIFI_AP);
-      WiFi.softAP(APssid, APpassword);
-      WMode = "AP";
-      Serial.print("Connected to ");
-      Serial.println(APssid);
-      IPAddress myIP = WiFi.softAPIP();
-      Serial.print("IP address: ");
-      Serial.println(myIP);
-      if (MatrixEnabled == "1")
+      relayStorage.relays[i] = getRelayData(i + 1);
+      if (relayStorage.relays[i].pin >= 0)
       {
-        // Display 'AP' on LED's
-        CharOnLED(30, 0);
-        CharOnLED(15, 1);
-      }
-    }
-    else
-    {
-      Serial.println("");
-      Serial.print("Connected to ");
-      Serial.println(ssidStored);
-      Serial.print("IP address: ");
-      Serial.println(WiFi.localIP());
-      Serial.print("Hostname: ");
-      Serial.println(DeviceName);
+        Serial.println("Setting relay" + String(i + 1) + " pin " + String(relayStorage.relays[i].pin));
+        delay(500);
+        pinMode(relayStorage.relays[i].pin, OUTPUT);
+        digitalWrite(relayStorage.relays[i].pin, GetInitialRelayValue(relayStorage.relays[i]));
+        if (relayStorage.relays[i].type == 2 && relayStorage.relays[i].pin2 >= 0)
+        {
+          Serial.println("Setting relay" + String(i + 1) + " pin2 " + String(relayStorage.relays[i].pin2));
 
-      if (MatrixEnabled == "1")
-      {
-        // Display 'OK' on LED's
-        CharOnLED(25, 0);
-        CharOnLED(29, 1);
+          int relayValue = GetInitialRelayValue(relayStorage.relays[i]);
+          if (relayValue == LOW)
+          {
+            relayValue = HIGH;
+          }
+          else
+          {
+            relayValue = LOW;
+          }
+          
+          pinMode(relayStorage.relays[i].pin2, OUTPUT);
+          digitalWrite(relayStorage.relays[i].pin2, relayValue);
+        }
       }
     }
   }
+}
 
-  /* Activate the mdns */
-  if (!mdns.begin(DeviceName.c_str(), WiFi.localIP())) {
-    Serial.println("Error setting up mDNS responder!");
-    while (1) {
-      delay(1000);
-    }
-  }
-  else
+
+void saveRelayData()
+{
+  HandleEeprom(enablerelay_Address, "write", String(relayStorage.enabled));
+  for (int i = 0; i < relayCount; i++)
   {
-    Serial.println("mDNS responder setup successful");
+	  setRelayData(relayStorage.relays[i], i + 1);
   }
+}
 
+void updateRelayStatus()
+{
+  if (relayStorage.enabled)
+  {
+    for (int i = 0; i < relayCount; i++)
+    {
+      int relay_status = digitalRead(relayStorage.relays[i].pin);
+      if (relayStorage.relays[i].type == 0)
+      {
+        if (relay_status == 0)
+        {
+          relayStorage.relays[i].state = 1;
+        }
+        else
+        {
+          relayStorage.relays[i].state = 0;
+        }
+      }
+      else if (relayStorage.relays[i].type == 1)
+      {
+        if (relay_status == 0)
+        {
+          relayStorage.relays[i].state = 0;
+        }
+        else
+        {
+          relayStorage.relays[i].state = 1;
+        }
+      }
+      else if (relayStorage.relays[i].type == 2)
+      {
+        if (relay_status == 0)
+        {
+          relayStorage.relays[i].state = 1;
+        }
+        else
+        {
+          relayStorage.relays[i].state = 0;
+        }
+      }
+	  }
+  }
+}
+
+void setupWebserver()
+{
   // If no root page && AP mode, set root to simple upload page
   if (!SPIFFS.exists("/root.html") && WMode != "AP")
   {
@@ -822,8 +776,209 @@ void setup()
 
   server.begin();
   Serial.println("HTTP server started");
+}
+
+void setupMDNSServer()
+{
+  // Activate the mdns
+  if (!mdns.begin(DeviceName.c_str(), WiFi.localIP())) {
+    Serial.println("Error setting up mDNS responder!");
+    while (1) {
+      delay(1000);
+    }
+  }
+  else
+  {
+    Serial.println("mDNS responder setup successful");
+  }
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("Initilizing");
+  int SizeOfArr = (sizeof(EepromAdress) / 4 ) - 1 ;
+  int eeprom_alloc = EepromAdress[SizeOfArr] + EepromLength[SizeOfArr];
+  EEPROM.begin(eeprom_alloc);
+
+  String eepromVersion = HandleEeprom(version_Address, "read");
+  if (eepromVersion != ESPimaticVersion)
+  {
+    ErrorList[ErrorUpgrade] = 1;
+    HandleEeprom(version_Address, "write", ESPimaticVersion);
+  }
+
+  // Check if EEPROM is valid
+  int EepromStatus = CheckEeprom();
+  if (EepromStatus != 1 && ErrorList[ErrorUpgrade] != 1)
+  {
+    ErrorList[ErrorEeprom] = 1;
+  }
+
+  // Check if SPIFFS is OK
+  if (!SPIFFS.begin())
+  {
+    Serial.println("SPIFFS failed, needs formatting");
+    handleFormat();
+    delay(500);
+    ESP.restart();
+  }
+  else
+  {
+    FSInfo fs_info;
+    if (!SPIFFS.info(fs_info))
+    {
+      Serial.println("fs_info failed");
+    }
+    else
+    {
+      FSTotal = fs_info.totalBytes;
+      FSUsed = fs_info.usedBytes;
+    }
+  }
+
+  loadRelayData();
+  
+  BSlocal = HandleEeprom(bslocal_Address, "read");
+
+  String IREnabled = HandleEeprom(enableir_Address, "read");
+  if (IREnabled == "1")
+  {
+    irsend.begin();
+  }
+
+  DeviceName = HandleEeprom(devicename_Address, "read");
+
+  MatrixEnabled = HandleEeprom(enablematrix_Address, "read");
+  if (MatrixEnabled == "1")
+  {
+    String MatrixPin = HandleEeprom(matrixpin_Address, "read");
+    ShowOnMatrix = HandleEeprom(showonmatrix_Address, "read");
+    MatrixIntensity = HandleEeprom(matrixintensity_Address, "read");
 
 
+    LEDpin = MatrixPin.toInt();
+    lc = LedControl(LEDpin, 2);
+    /*
+      The MAX72XX is in power-saving mode on startup,
+      we have to do a wakeup call
+    */
+    lc.shutdown(0, false);
+    lc.shutdown(1, false);
+    /* Set the brightness to a medium values */
+    lc.setIntensity(0, MatrixIntensity.toInt());
+    lc.setIntensity(1, MatrixIntensity.toInt());
+    /* and clear the display */
+    lc.clearDisplay(0);
+    lc.clearDisplay(1);
+  }
+
+
+  String ssidStored = HandleEeprom(ssid_Address, "read");
+  String passStored = HandleEeprom(password_Address, "read");
+  if (ssidStored == "" || passStored == "")
+  {
+    Serial.println("No wifi configuration found, starting in AP mode");
+    Serial.println("SSID: ");
+    Serial.println(APssid);
+    Serial.println("password: ");
+    Serial.println(APpassword);
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(APssid, APpassword);
+    WMode = "AP";
+    Serial.print("Connected to ");
+    Serial.println(APssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.softAPIP());
+    if (MatrixEnabled == "1")
+    {
+      // Display 'AP' on LED's
+      CharOnLED(30, 0);
+      CharOnLED(15, 1);
+    }
+  }
+  else
+  {
+    int i = 0;
+    int row = 0;
+    int col = 0;
+    Serial.println("Connecting to :");
+    Serial.println(ssidStored);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssidStored.c_str(), passStored.c_str());
+    while (WiFi.status() != WL_CONNECTED && i < 31 && MatrixEnabled == "1")
+    {
+      delay(1000);
+      Serial.print(".");
+      lc.setLed(0, row, col, true);
+      lc.setLed(1, row, col, true);
+      ++i;
+
+      ++row;
+      // if (col == 8) { ++col; }
+      if (row == 8) {
+        row = 0;
+        ++col;
+      }
+    }
+    while (WiFi.status() != WL_CONNECTED && i < 31 && MatrixEnabled != "0")
+    {
+      delay(1000);
+      Serial.print(".");
+      ++i;
+    }
+
+
+    if (WiFi.status() != WL_CONNECTED && i >= 30)
+    {
+      WiFi.disconnect();
+      delay(1000);
+      Serial.println("");
+      Serial.println("Couldn't connect to network :( ");
+      Serial.println("Setting up access point");
+      Serial.println("SSID: ");
+      Serial.println(APssid);
+      Serial.println("password: ");
+      Serial.println(APpassword);
+      WiFi.mode(WIFI_AP);
+      WiFi.softAP(APssid, APpassword);
+      WMode = "AP";
+      Serial.print("Connected to ");
+      Serial.println(APssid);
+      IPAddress myIP = WiFi.softAPIP();
+      Serial.print("IP address: ");
+      Serial.println(myIP);
+      if (MatrixEnabled == "1")
+      {
+        // Display 'AP' on LED's
+        CharOnLED(30, 0);
+        CharOnLED(15, 1);
+      }
+    }
+    else
+    {
+      Serial.println("");
+      Serial.print("Connected to ");
+      Serial.println(ssidStored);
+      Serial.print("IP address: ");
+      Serial.println(WiFi.localIP());
+      Serial.print("Hostname: ");
+      Serial.println(DeviceName);
+
+      if (MatrixEnabled == "1")
+      {
+        // Display 'OK' on LED's
+        CharOnLED(25, 0);
+        CharOnLED(29, 1);
+      }
+    }
+  }
+
+  setupMDNSServer();
+  
+  setupWebserver();
+  
   EnableWebAuth = HandleEeprom(enablewebauth_Address, "read");
 
   DHTEnabled = HandleEeprom(enabledht_Address, "read");
@@ -1019,6 +1174,8 @@ void handle_api()
 
   String EspimaticApi = HandleEeprom(espimaticapikey_Address, "read");
 
+  DEBUG_PRINT("Received API call (action: '" + action + "'; value: '" + value + "'; device: '" + device + "'");
+  
   if (api != EspimaticApi && EnableWebAuth == "1" && !is_authenticated(0) )
   {
     server.send ( 401, "text/html", "unauthorized");
@@ -1026,6 +1183,7 @@ void handle_api()
   }
   else
   {
+    DEBUG_PRINT("Processing API call");
 
     if (action == "ir")
     {
@@ -1082,7 +1240,7 @@ void handle_api()
       }
     }
 
-    if (action.substring(0, 4) == "relay")
+    if (action.substring(0, 5) == "relay")
     {
       handle_api_relay(action, value);
     }
@@ -1137,56 +1295,90 @@ void handle_api()
   }
 }
 
+void switchOnRelay(relayStruct r)
+{
+  DEBUG_PRINT("Switching on relay (PIN " + String(r.pin) + ")");
+  if (r.type == 0) {
+    digitalWrite(r.pin, LOW);
+  }
+  else if (r.type == 1) {
+    digitalWrite(r.pin, HIGH);
+  }
+  else if (r.type == 2) {
+    digitalWrite(r.pin, LOW);
+    digitalWrite(r.pin2, HIGH);
+  }
+}
+
+void switchOffRelay(relayStruct r)
+{
+  DEBUG_PRINT("Switching off relay (PIN " + String(r.pin) + ")");
+  if (r.type == 0) 
+  {
+    digitalWrite(r.pin, HIGH);
+  }
+  else if (r.type == 1) 
+  {
+    digitalWrite(r.pin, LOW);
+  }
+  else if (r.type == 2) 
+  {
+    digitalWrite(r.pin, HIGH);
+    digitalWrite(r.pin2, LOW);
+  }
+}
+
+void toggleRelay(relayStruct r)
+{
+  DEBUG_PRINT("Toggling relay (PIN " + String(r.pin) + ")");
+  if (r.state)
+  {
+    switchOffRelay(r);
+  }
+  else
+  {
+    switchOnRelay(r);
+  }
+}
+
 void handle_api_relay(String action, String value)
 {
-  struct relayStruct r;
-
   String relayIndexStr = action.substring(5);
   int relayIndex = relayIndexStr.toInt();
 
-  if ((relayIndex < 1) || (relayIndex > 4))
+  DEBUG_PRINT("Received relay action for relay (substring: " + relayIndexStr + ") " + String(relayIndex) + " with value '" + value + "'");
+
+  if ((relayIndex < 1) || (relayIndex > relayCount))
     return;
 
-  r = getRelayData(relayIndex);
+  updateRelayStatus();
+  
+  relayStruct r = relayStorage.relays[relayIndex - 1];
 
   if (value == "on")
   {
-    if (r.type == "0") {
-      digitalWrite(r.pin.toInt(), LOW);
-    }
-    if (r.type == "1") {
-      digitalWrite(r.pin.toInt(), HIGH);
-    }
+    switchOnRelay(r);
     server.send ( 200, "text/html", "OK");
   }
-  if (value == "off")
+  else if (value == "off")
   {
-    if (r.type == "0") {
-      digitalWrite(r.pin.toInt(), HIGH);
-    }
-    if (r.type == "1") {
-      digitalWrite(r.pin.toInt(), LOW);
-    }
+    switchOffRelay(r);
     server.send ( 200, "text/html", "OK");
   }
-  if (value == "status")
+  else if (value == "toggle")
   {
-    int rstate = digitalRead(r.pin.toInt());
-    if (rstate == 0 && r.type == "0")
-    {
+    toggleRelay(r);
+    server.send ( 200, "text/html", "OK");
+  }
+  else if (value == "status")
+  {
+    if (r.state)
+  	{
       server.send ( 200, "text/html", "on");
-    }
-    if (rstate == 0 && r.type == "1")
+  	}
+    else
     {
       server.send ( 200, "text/html", "off");
-    }
-    if (rstate == 1 && r.type == "0")
-    {
-      server.send ( 200, "text/html", "off");
-    }
-    if (rstate == 1 && r.type == "1")
-    {
-      server.send ( 200, "text/html", "on");
     }
   }
 }
@@ -1388,15 +1580,15 @@ void handle_irled_ajax()
   }
 }
 
-String convertStateToInt(String state)
+int convertStateToInt(String state)
 {
   if (state == "on")
   {
-    return "1";
+    return 1;
   }
   else
   {
-    return "0";
+    return 0;
   }
 }
 
@@ -1411,36 +1603,45 @@ void handle_relay_ajax()
     String form = server.arg("form");
     if (form != "relay")
     {
-      String relay_enable = HandleEeprom(enablerelay_Address, "read");
+      String sendString = String(relayStorage.enabled);
 
-      String sendString = relay_enable;
-
-      struct relayStruct currentrelay;
       String relayTypeListbox;
-      String relayListbox;
-	  String sendTypes = "";
-	  String sendInitialStates = "";
+      String relayListboxPin;
+      String relayListboxPin2;
+	    String sendTypes = "";
+	    String sendInitialStates = "";
+      String sendRelayListboxPin2 = "";
       for (int i = 0; i < relayCount; i++)
       {
-        currentrelay = getRelayData(i + 1);
-        relayTypeListbox = ListBox(0, 1, currentrelay.type.toInt(), "relay" + String(i + 1) + "_type");
-        if (currentrelay.pin != "")
+        relayTypeListbox = ListBox(0, 2, relayStorage.relays[i].type, "relay" + String(i + 1) + "_type");
+        if (relayStorage.relays[i].pin >= 0)
         {
-          relayListbox = HWListBox(0, 16, currentrelay.pin.toInt(), "relay" + String(i + 1) + "_pin", "relay");
+          relayListboxPin = HWListBox(0, 16, relayStorage.relays[i].pin, "relay" + String(i + 1) + "_pin", "relay");
         }
         else
         {
-          relayListbox = HWListBox(0, 16, -1, "relay" + String(i + 1) + "_pin", "relay");
+          relayListboxPin = HWListBox(0, 16, -1, "relay" + String(i + 1) + "_pin", "relay");
+        }
+        
+        if (relayStorage.relays[i].pin2 >= 0)
+        {
+          relayListboxPin2 = HWListBox(0, 16, relayStorage.relays[i].pin2, "relay" + String(i + 1) + "_pin2", "relay");
+        }
+        else
+        {
+          relayListboxPin2 = HWListBox(0, 16, -1, "relay" + String(i + 1) + "_pin2", "relay");
         }
 		
-		sendString += sep + relayListbox;
+        sendString += sep + relayListboxPin;
+        sendRelayListboxPin2 += sep + relayListboxPin2;
         sendTypes += sep + relayTypeListbox;
-        sendInitialStates += sep + currentrelay.initialState;
+        sendInitialStates += sep + String(relayStorage.relays[i].initialState);
       }
 
-	  sendString += sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade];
-	  sendString += sendTypes;
-	  sendString += sendInitialStates;
+      sendString += sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade];
+      sendString += sendTypes;
+      sendString += sendInitialStates;
+      sendString += sendRelayListboxPin2;
 	  
       // Glue everything together and send to client
       server.send(200, "text/html", sendString);
@@ -1448,19 +1649,21 @@ void handle_relay_ajax()
     if (form == "relay")
     {
       String relay_boolArg = server.arg("relay_bool");
-      relay_boolArg = convertStateToInt(relay_boolArg);
+      relayStorage.enabled = convertStateToInt(relay_boolArg);
 
-      HandleEeprom(enablerelay_Address, "write", relay_boolArg);
-
-	  struct relayStruct relays[relayCount];
       for (int i = 0; i < relayCount; i++)
       {
-        relays[i].pin = server.arg("relay" + String(i + 1) + "_pin");
-        relays[i].type = server.arg("relay" + String(i + 1) + "_type");
-        relays[i].initialState = server.arg("relay" + String(i + 1) + "_initialState");
-        relays[i].initialState = convertStateToInt(relays[i].initialState);
-        setRelayData(relays[i], i + 1);
+        String relayPin = server.arg("relay" + String(i + 1) + "_pin");
+        relayStorage.relays[i].pin = relayPin.toInt();
+        String relayPin2 = server.arg("relay" + String(i + 1) + "_pin2");
+        relayStorage.relays[i].pin2 = relayPin2.toInt();
+        String relayType = server.arg("relay" + String(i + 1) + "_type");
+        relayStorage.relays[i].type = relayType.toInt();
+
+        relayStorage.relays[i].initialState = convertStateToInt(server.arg("relay" + String(i + 1) + "_initialState"));
       }
+
+      saveRelayData();
 
       server.send ( 200, "text/html", "OK");
       delay(500);
@@ -1480,63 +1683,20 @@ void handle_rcswitch_ajax()
     String form = server.arg("form");
     if (form != "relay")
     {
-      String relay_enable = HandleEeprom(enablerelay_Address, "read");
-
-      String sendString = relay_enable;
-
-      struct relayStruct currentrelay;
-      String relayTypeListbox;
-      String relayListbox;
-	  String sendTypes = "";
-	  String sendInitialStates = "";
-      for (int i = 0; i < relayCount; i++)
-      {
-        currentrelay = getRelayData(i + 1);
-        relayTypeListbox = ListBox(0, 1, currentrelay.type.toInt(), "relay" + String(i + 1) + "_type");
-        if (currentrelay.pin != "")
-        {
-          relayListbox = HWListBox(0, 16, currentrelay.pin.toInt(), "relay" + String(i + 1) + "_pin", "relay");
-        }
-        else
-        {
-          relayListbox = HWListBox(0, 16, -1, "relay" + String(i + 1) + "_pin", "relay");
-        };
-		
-		sendString += sep + relayListbox;
-        sendTypes += sep + relayTypeListbox;
-        sendInitialStates += sep + currentrelay.initialState;
-      }
-
-	  sendString += sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade];
-	  sendString += sendTypes;
-	  sendString += sendInitialStates;
+      String sendString = "";
 	  
       // Glue everything together and send to client
       server.send(200, "text/html", sendString);
     }
     if (form == "relay")
     {
-      String relay_boolArg = server.arg("relay_bool");
-      relay_boolArg = convertStateToInt(relay_boolArg);
-
-      HandleEeprom(enablerelay_Address, "write", relay_boolArg);
-
-	  struct relayStruct relays[relayCount];
-      for (int i = 0; i < relayCount; i++)
-      {
-        relays[i].pin = server.arg("relay" + String(i + 1) + "_pin");
-        relays[i].type = server.arg("relay" + String(i + 1) + "_type");
-        relays[i].initialState = server.arg("relay" + String(i + 1) + "_initialState");
-        relays[i].initialState = convertStateToInt(relays[i].initialState);
-        setRelayData(relays[i], i + 1);
-      }
-
       server.send ( 200, "text/html", "OK");
       delay(500);
       ESP.restart();
     }
   }
 }
+
 
 void handle_root_ajax()
 {
@@ -1551,6 +1711,8 @@ void handle_root_ajax()
     String enabled =  "<span class='glyphicon glyphicon-ok-circle pull-right'>";
     String relay_on = "<span class='glyphicon glyphicon-resize-small pull-right'>";
     String relay_off = "<span class='glyphicon glyphicon-resize-full pull-right'>";
+    
+    String sendString = "";
 
     // Collect everything for DS18B20
     //String DS18B20Enabled = HandleEeprom(enableds18b20_Address, "read");
@@ -1579,7 +1741,7 @@ void handle_root_ajax()
     long days       = (long) ((millis() / (86400000)) % 10);
 
 
-    String Uptime     = days + String (" d ") + hours + String(" h ") + minutes + String(" min ") + seconds + String(" sec");
+    String Uptime = days + String (" d ") + hours + String(" h ") + minutes + String(" min ") + seconds + String(" sec");
 
     // Collect everything for LED Matrix
     String MatrixEnabled = HandleEeprom(enablematrix_Address, "read");
@@ -1596,78 +1758,28 @@ void handle_root_ajax()
     {
       ir = enabled;
     }
+    
+    sendString = temperature + sep + Uptime + sep + matrix + sep + ir;
 
     // Collect everything for relay
-    String RelayEnabled = HandleEeprom(enablerelay_Address, "read");
-    String relay  = disabled;
-    struct relayStruct relay1 = {"", "", "", ""};
-    struct relayStruct relay2 = {"", "", "", ""};
-    struct relayStruct relay3 = {"", "", "", ""};
-    struct relayStruct relay4 = {"", "", "", ""};
-    if (RelayEnabled == "1")
+    String relay = disabled;
+    if (relayStorage.enabled)
     {
       relay = enabled;
-
-      relay1 = getRelayData(1);
-      relay2 = getRelayData(2);
-      relay3 = getRelayData(3);
-      relay4 = getRelayData(4);
-
-      int relay1_status = digitalRead(relay1.pin.toInt());
-      int relay2_status = digitalRead(relay2.pin.toInt());
-      int relay3_status = digitalRead(relay3.pin.toInt());
-      int relay4_status = digitalRead(relay4.pin.toInt());
-
-      if (relay1_status == 0 && relay1.type == "0")
+      updateRelayStatus();
+    }
+    
+    sendString += sep + relay;
+    
+    for (int i = 0; i < relayCount; i++)
+    {
+      if (relayStorage.enabled && relayStorage.relays[i].state)
       {
-        relay1.state = relay_on;
-      }
-      else if (relay1_status == 1 && relay1.type == "1")
-      {
-        relay1.state = relay_on;
+        sendString += sep + relay_on;
       }
       else
       {
-        relay1.state = relay_off;
-      }
-
-      if (relay2_status == 0 && relay2.type == "0")
-      {
-        relay2.state = relay_on;
-      }
-      else if (relay2_status == 1 && relay2.type == "1")
-      {
-        relay2.state = relay_on;
-      }
-      else
-      {
-        relay2.state = relay_off;
-      }
-
-      if (relay3_status == 0 && relay3.type == "0")
-      {
-        relay3.state = relay_on;
-      }
-      else if (relay3_status == 1 && relay3.type == "1")
-      {
-        relay3.state = relay_on;
-      }
-      else
-      {
-        relay3.state = relay_off;
-      }
-
-      if (relay4_status == 0 && relay4.type == "0")
-      {
-        relay4.state = relay_on;
-      }
-      else if (relay4_status == 1 && relay4.type == "1")
-      {
-        relay4.state = relay_on;
-      }
-      else
-      {
-        relay4.state = relay_off;
+        sendString += sep + relay_off;
       }
     }
 
@@ -1688,8 +1800,10 @@ void handle_root_ajax()
     // Collect free memory
     int FreeHeap = ESP.getFreeHeap();
 
+    sendString += sep + ESPimaticVersion + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade] + sep + dht_temp + sep + dht_hum + sep + FSTotal + sep + FSUsed + sep + FreeHeap + sep + DeviceName + sep + EnableWebAuth + sep + ADCvalue + sep + curWattsValue;
+
     // Glue everything together and send to client
-    server.send(200, "text/html", temperature + sep + Uptime + sep + matrix + sep + ir + sep + relay + sep + relay1.state + sep + relay2.state + sep + relay3.state + sep + relay4.state + sep + ESPimaticVersion + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade] + sep + dht_temp + sep + dht_hum + sep + FSTotal + sep + FSUsed + sep + FreeHeap + sep + DeviceName + sep + EnableWebAuth + sep + ADCvalue + sep + curWattsValue);
+    server.send(200, "text/html", sendString);
   }
 }
 
@@ -2648,7 +2762,7 @@ void CharOnLED(int ch, int led)
 String HWListBox(int first, int last, int selected, String ListName, String Hardware)
 {
   String HTML = "";
-  int UsedPins[] = {99, 99, 99, 99, 99, 99, 99, 99 , 99, 99, 99};
+  int UsedPins[gpioCount] = {99, 99, 99, 99, 99, 99, 99, 99 , 99, 99, 99};
   int ds18b20_pos = 0;
   int matrix1_pos = 1;
   int matrix2_pos = 2;
@@ -2668,14 +2782,9 @@ String HWListBox(int first, int last, int selected, String ListName, String Hard
   String kwhint_enable = HandleEeprom(kwhintenable_Address, "read");
   String deepsleep_enable = HandleEeprom(enabledsleep_Address, "read");
 
-
   String matrix_pin = HandleEeprom(matrixpin_Address, "read");
   String irled_pin = HandleEeprom(irpin_Address, "read");
   String ds18b20_pin = HandleEeprom(ds18b20pin_Address, "read");
-  String relay1_pin = HandleEeprom(relay1pin_Address, "read");
-  String relay2_pin = HandleEeprom(relay2pin_Address, "read");
-  String relay3_pin = HandleEeprom(relay3pin_Address, "read");
-  String relay4_pin = HandleEeprom(relay4pin_Address, "read");
   String kwhint_pin = HandleEeprom(kwhintpin_Address, "read");
 
 
@@ -2740,12 +2849,12 @@ String HWListBox(int first, int last, int selected, String ListName, String Hard
     UsedPins[irled_pos] = irled_pin.toInt();
   }
 
-  if (relay_enable == "1" && Hardware != "relay")
+  if (relayStorage.enabled && Hardware != "relay" && relayCount >= 4)
   {
-    UsedPins[relay1_pos] = relay1_pin.toInt();
-    UsedPins[relay2_pos] = relay2_pin.toInt();
-    UsedPins[relay3_pos] = relay3_pin.toInt();
-    UsedPins[relay4_pos] = relay4_pin.toInt();
+    UsedPins[relay1_pos] = relayStorage.relays[0].pin;
+    UsedPins[relay2_pos] = relayStorage.relays[1].pin;
+    UsedPins[relay3_pos] = relayStorage.relays[2].pin;
+    UsedPins[relay4_pos] = relayStorage.relays[3].pin;
   }
 
   //if (led_enable == "1" && Hardware != "led")

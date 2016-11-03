@@ -81,3 +81,7 @@ select option[disabled] {
     cursor: inherit;
     display: block;
 }
+.input-group-addon {
+    min-width: 100px;
+    text-align: left;
+}
