@@ -77,7 +77,7 @@ IRsend irsend(5); //an IR led is connected to GPIO pin 0
 int TelnetMenu = -1;
 
 String sep = "____";
-String ESPimaticVersion = "0.1.27";
+String ESPimaticVersion = "0.1.28";
 String DS18B20Enabled = "0";
 String DHTEnabled = "0";
 String MatrixEnabled = "0";
@@ -171,8 +171,10 @@ unsigned long pulseTimeS = 0;
 #define relay2pin2_Address 568
 #define relay3pin2_Address 570
 #define relay4pin2_Address 572
-int EepromAdress[] = {ssid_Address, password_Address, pimhost_Address, pimport_Address, pimuser_Address, pimpass_Address, enablematrix_Address, matrixpin_Address, enableds18b20_Address, ds18b20pin_Address, enabledht_Address, dhttype_Address, dhtpin_Address, enabledsleep_Address, ds18b20var_Address, ds18b20interval_Address, ds18b20resolution_Address, enableir_Address, irpin_Address, enablerelay_Address, relay1pin_Address, relay2pin_Address, relay3pin_Address, dhttempvar_Address, dhthumvar_Address, dhtinterval_Address, relay4pin_Address, eeprommd5_Address, version_Address, availablegpio_Address, showonmatrix_Address, matrixintensity_Address, relay1type_Address, relay2type_Address, relay3type_Address, relay4type_Address, devicename_Address, webuser_Address, webpass_Address, enablewebauth_Address, espimaticapikey_Address, bslocal_Address, enableadc_Address, adcinterval_Address, adcvar_Address, enableled_Address, led1pin_Address, led2pin_Address, led3pin_Address, dsleepaction_Address, kwhintenable_Address, kwhintpin_Address, kwhintinterval_Address, kwhintc_Address, kwhintvar_Address, dsleepinterval_Address, dsleepbackdoor_Address, relay1InitialState_Address, relay2InitialState_Address, relay3InitialState_Address, relay4InitialState_Address, relay1pin2_Address, relay2pin2_Address, relay3pin2_Address, relay4pin2_Address};
-int EepromLength[] = {31, 65, 32, 5, 11, 20, 1, 2, 1, 2, 1, 1, 2, 1, 30, 2, 2, 1, 2, 1, 2, 2, 2, 30, 30, 2, 2, 32, 8, 17, 1, 2, 1, 1 , 1 , 1, 30, 25, 25, 1, 15, 1, 1, 2, 30, 1, 2, 2, 2, 2, 1, 2, 2, 5, 30, 2, 30, 1, 1, 1, 1, 2, 2, 2, 2};
+#define enableRCSwitch_Address 574
+#define rcSwitchPin_Address 575
+int EepromAdress[] = {ssid_Address, password_Address, pimhost_Address, pimport_Address, pimuser_Address, pimpass_Address, enablematrix_Address, matrixpin_Address, enableds18b20_Address, ds18b20pin_Address, enabledht_Address, dhttype_Address, dhtpin_Address, enabledsleep_Address, ds18b20var_Address, ds18b20interval_Address, ds18b20resolution_Address, enableir_Address, irpin_Address, enablerelay_Address, relay1pin_Address, relay2pin_Address, relay3pin_Address, dhttempvar_Address, dhthumvar_Address, dhtinterval_Address, relay4pin_Address, eeprommd5_Address, version_Address, availablegpio_Address, showonmatrix_Address, matrixintensity_Address, relay1type_Address, relay2type_Address, relay3type_Address, relay4type_Address, devicename_Address, webuser_Address, webpass_Address, enablewebauth_Address, espimaticapikey_Address, bslocal_Address, enableadc_Address, adcinterval_Address, adcvar_Address, enableled_Address, led1pin_Address, led2pin_Address, led3pin_Address, dsleepaction_Address, kwhintenable_Address, kwhintpin_Address, kwhintinterval_Address, kwhintc_Address, kwhintvar_Address, dsleepinterval_Address, dsleepbackdoor_Address, relay1InitialState_Address, relay2InitialState_Address, relay3InitialState_Address, relay4InitialState_Address, relay1pin2_Address, relay2pin2_Address, relay3pin2_Address, relay4pin2_Address, enableRCSwitch_Address, rcSwitchPin_Address};
+int EepromLength[] = {31, 65, 32, 5, 11, 20, 1, 2, 1, 2, 1, 1, 2, 1, 30, 2, 2, 1, 2, 1, 2, 2, 2, 30, 30, 2, 2, 32, 8, 17, 1, 2, 1, 1 , 1 , 1, 30, 25, 25, 1, 15, 1, 1, 2, 30, 1, 2, 2, 2, 2, 1, 2, 2, 5, 30, 2, 30, 1, 1, 1, 1, 2, 2, 2, 2, 1, 2};
 int StartAddress = 0;
 
 #define ErrorWifi 0
@@ -200,15 +202,6 @@ uint8_t LEDpin;
 //LedControl lc=LedControl(2,2); // Load pin, number of LED displays
 LedControl lc = LedControl(LEDpin, 2); // Load pin, number of LED displays
 
-// RC switch config
-RCSwitch rcSwitch = RCSwitch();
-// replace with your values
-char* housecode = "11010";
-char* socketcodes[] = {"00010", "00001", "10000", "01000"};
-char* socketnames[] = {"Lampe", "Lautsprecher", "Fernseher", "Ventilator"};
-int numofsockets = sizeof(socketcodes) / 4;
-
-
 /* we always wait a bit between updates of the display */
 unsigned long delaytime = 100;
 
@@ -234,7 +227,7 @@ ESP8266WebServer server(80);
 MDNSResponder mdns;
 WiFiClient client;
 
-
+RCSwitch mySwitch;
 
 const static byte alphabetBitmap[41][8] = {
   {0x0, 0x0, 0x7E, 0x81, 0x81, 0x81, 0x7E, 0x0}, //0
@@ -628,6 +621,23 @@ void updateRelayStatus()
   }
 }
 
+void setupRCSwitch()
+{
+  Serial.println("Loading RC switch data");
+  String rcSwitch_enabled = HandleEeprom(enableRCSwitch_Address, "read");
+  bool rcSwitchEnabled = rcSwitch_enabled.toInt();
+
+  if (rcSwitchEnabled)
+  {
+    mySwitch = RCSwitch();
+    
+    String rcSwitch_pin = HandleEeprom(rcSwitchPin_Address, "read");
+    int rcSwitchPin = rcSwitch_pin.toInt();
+
+    mySwitch.enableTransmit(rcSwitchPin);
+  }
+}
+
 void setupWebserver()
 {
   // If no root page && AP mode, set root to simple upload page
@@ -655,6 +665,7 @@ void setupWebserver()
   server.on("/ledmatrix_ajax", handle_ledmatrix_ajax);
   server.on("/irled_ajax", handle_irled_ajax);
   server.on("/relay_ajax", handle_relay_ajax);
+  server.on("/rcswitch_ajax", handle_rcswitch_ajax);
   server.on("/dht_ajax", handle_dht_ajax);
   server.on("/esp_ajax", handle_esp_ajax);
   server.on("/adc_ajax", handle_adc_ajax);
@@ -839,6 +850,8 @@ void setup()
   }
 
   loadRelayData();
+  
+  setupRCSwitch();
   
   BSlocal = HandleEeprom(bslocal_Address, "read");
 
@@ -1386,6 +1399,31 @@ void handle_api_relay(String action, String value)
 
 void handle_api_rcswitch(String device, String value)
 {
+  String groupstring = server.arg("group");
+ 
+  String webOutput = "Group: " + groupstring + "; Device: " + device + "; Action: " + value;
+
+  DEBUG_PRINT("Received rc switch action: " + webOutput);
+ 
+  char groupchar[groupstring.length() + 1];
+  groupstring.toCharArray(groupchar, groupstring.length() + 1);
+  char switchchar[device.length() + 1];
+  device.toCharArray(switchchar, device.length() + 1);
+    
+  if(value == "on")
+  {
+    mySwitch.switchOn(groupchar, switchchar);
+    server.send(200, "text/html", webOutput);
+  }
+  else if(value == "off")
+  {
+    mySwitch.switchOff(groupchar, switchchar);
+    server.send(200, "text/html", webOutput);
+  }
+  else
+  {
+    server.send(200, "text/html", "Wrong action code!");
+  }
 }
 
 
@@ -1461,6 +1499,8 @@ void handle_update_upload()
   }
   yield();
 }
+
+
 void handle_update_html2()
 {
   server.sendHeader("Connection", "close");
@@ -1469,6 +1509,11 @@ void handle_update_html2()
   ESP.restart();
 }
 
+
+String getErrorString()
+{
+  return ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade];
+}
 
 void handle_ledmatrix_ajax()
 {
@@ -1498,7 +1543,7 @@ void handle_ledmatrix_ajax()
       }
 
       // Glue everything together and send to client
-      server.send(200, "text/html", matrix_enable + sep + matrix_listbox + sep + matrixshow_listbox + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade] + sep + matrixintensity_listbox);
+      server.send(200, "text/html", matrix_enable + sep + matrix_listbox + sep + matrixshow_listbox + sep + getErrorString() + sep + matrixintensity_listbox);
     }
     if (form == "matrix")
     {
@@ -1554,7 +1599,7 @@ void handle_irled_ajax()
       }
 
       // Glue everything together and send to client
-      server.send(200, "text/html", irled_enable + sep + irled_listbox + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade]);
+      server.send(200, "text/html", irled_enable + sep + irled_listbox + sep + getErrorString());
     }
     if (form == "irled")
     {
@@ -1638,7 +1683,7 @@ void handle_relay_ajax()
         sendInitialStates += sep + String(relayStorage.relays[i].initialState);
       }
 
-      sendString += sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade];
+      sendString += sep + getErrorString();
       sendString += sendTypes;
       sendString += sendInitialStates;
       sendString += sendRelayListboxPin2;
@@ -1681,15 +1726,38 @@ void handle_rcswitch_ajax()
   else
   {
     String form = server.arg("form");
-    if (form != "relay")
+    if (form != "rcswitch")
     {
-      String sendString = "";
+      String rcswitch_enable = HandleEeprom(enableRCSwitch_Address, "read");
+      String rcswitch_pin = HandleEeprom(rcSwitchPin_Address, "read");
+
+      String rcSwitch_listbox = "";
+      if (rcswitch_pin != "")
+      {
+        rcSwitch_listbox = HWListBox(0, 16, rcswitch_pin.toInt(), "rcswitch_pin", "dht");
+      }
+      else
+      {
+        rcSwitch_listbox = HWListBox(0, 16, -1, "rcswitch_pin", "dht");
+      }
+
+      String sendString = rcswitch_enable;
+      sendString += sep + rcSwitch_listbox;
+      sendString += sep + getErrorString();
 	  
       // Glue everything together and send to client
       server.send(200, "text/html", sendString);
     }
-    if (form == "relay")
+    if (form == "rcswitch")
     {
+      String rcswitch_boolArg = server.arg("rcswitch_bool");
+      bool rcSwitch_enabled = convertStateToInt(rcswitch_boolArg);
+      String rcSwitchPin_intArg = server.arg("rcswitch_pin");
+      int rcSwitchPin = rcSwitchPin_intArg.toInt();
+
+      HandleEeprom(enableRCSwitch_Address, "write", String(rcSwitch_enabled));
+      HandleEeprom(rcSwitchPin_Address, "write", String(rcSwitchPin));
+      
       server.send ( 200, "text/html", "OK");
       delay(500);
       ESP.restart();
@@ -1800,7 +1868,7 @@ void handle_root_ajax()
     // Collect free memory
     int FreeHeap = ESP.getFreeHeap();
 
-    sendString += sep + ESPimaticVersion + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade] + sep + dht_temp + sep + dht_hum + sep + FSTotal + sep + FSUsed + sep + FreeHeap + sep + DeviceName + sep + EnableWebAuth + sep + ADCvalue + sep + curWattsValue;
+    sendString += sep + ESPimaticVersion + sep + getErrorString() + sep + dht_temp + sep + dht_hum + sep + FSTotal + sep + FSUsed + sep + FreeHeap + sep + DeviceName + sep + EnableWebAuth + sep + ADCvalue + sep + curWattsValue;
 
     // Glue everything together and send to client
     server.send(200, "text/html", sendString);
@@ -1868,7 +1936,7 @@ void handle_esp_ajax()
       String dsleep_actionlistbox = ListBox(1, 3, dsleep_action.toInt(), "dsleep_action");
 
       // Glue everything together and send to client
-      server.send(200, "text/html", gpio0 + sep + gpio1 + sep + gpio2 + sep + gpio3 + sep + gpio4 + sep + gpio5 + sep + gpio6 + sep + gpio7 + sep + gpio8 + sep + gpio9 + sep + gpio10 + sep + gpio11 + sep + gpio12 + sep + gpio13 + sep + gpio14 + sep + gpio15 + sep + gpio16 + sep + DeviceName + sep + EnableWebAuth + sep + WebUser + sep + WebPass  + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade] + sep + EspimaticApi + sep + BSlocal + sep + dsleep_enable + sep + dsleep_actionlistbox + sep + dsleep_intlistbox + sep + dsleep_backdoor);
+      server.send(200, "text/html", gpio0 + sep + gpio1 + sep + gpio2 + sep + gpio3 + sep + gpio4 + sep + gpio5 + sep + gpio6 + sep + gpio7 + sep + gpio8 + sep + gpio9 + sep + gpio10 + sep + gpio11 + sep + gpio12 + sep + gpio13 + sep + gpio14 + sep + gpio15 + sep + gpio16 + sep + DeviceName + sep + EnableWebAuth + sep + WebUser + sep + WebPass  + sep + getErrorString() + sep + EspimaticApi + sep + BSlocal + sep + dsleep_enable + sep + dsleep_actionlistbox + sep + dsleep_intlistbox + sep + dsleep_backdoor);
     }
     if (form == "devicename")
     {
@@ -2081,7 +2149,7 @@ void handle_esp_ajax()
     }
 
       // Glue everything together and send to client
-  //      server.send(200, "text/html", adc_enable + sep + adc_var + sep + adc_intlistbox + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade]);
+  //      server.send(200, "text/html", adc_enable + sep + adc_var + sep + adc_intlistbox + sep + getErrorString());
     }
     if (form == "adc")
     {
@@ -2128,7 +2196,7 @@ void handle_adc_ajax()
       String adc_intlistbox = ListBox(1, 5, adc_interval.toInt(), "adc_interval");
 
       // Glue everything together and send to client
-      server.send(200, "text/html", adc_enable + sep + adc_var + sep + adc_intlistbox + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade]);
+      server.send(200, "text/html", adc_enable + sep + adc_var + sep + adc_intlistbox + sep + getErrorString());
     }
     if (form == "adc")
     {
@@ -2187,7 +2255,7 @@ void handle_ds18b20_ajax()
       String ds18b20_resolistbox = ListBox(9, 12, ds18b20_resolution.toInt(), "DS18B20_resolution");
 
       // Glue everything together and send to client
-      server.send(200, "text/html", ds18b20_enable + sep + ds18b20_listbox + sep + ds18b20_intlistbox + sep + ds18b20_resolistbox + sep + ds18b20_var + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade]);
+      server.send(200, "text/html", ds18b20_enable + sep + ds18b20_listbox + sep + ds18b20_intlistbox + sep + ds18b20_resolistbox + sep + ds18b20_var + sep + getErrorString());
     }
     if (form == "ds18b20")
     {
@@ -2253,7 +2321,7 @@ void handle_kwhint_ajax()
       Serial.println("lezen inteval: " + String(kwhint_interval) );
 
       // Glue everything together and send to client
-      server.send(200, "text/html", kwhint_enable + sep + kwhint_listbox + sep + kwhint_intlistbox + sep + kwhint_var + sep + kwhint_c + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade]);
+      server.send(200, "text/html", kwhint_enable + sep + kwhint_listbox + sep + kwhint_intlistbox + sep + kwhint_var + sep + kwhint_c + sep + getErrorString());
     }
     if (form == "kwhint")
     {
@@ -2324,7 +2392,7 @@ void handle_dht_ajax()
       String dht_typelistbox = ListBox(1, 2, dht_type.toInt(), "dht_type");
 
       // Glue everything together and send to client
-      server.send(200, "text/html", dht_enable + sep + dht_listbox + sep + dht_intlistbox + sep + dht_typelistbox + sep + dhttemp_var + sep + dhthum_var + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade]);
+      server.send(200, "text/html", dht_enable + sep + dht_listbox + sep + dht_intlistbox + sep + dht_typelistbox + sep + dhttemp_var + sep + dhthum_var + sep + getErrorString());
     }
     if (form == "dht")
     {
@@ -2471,7 +2539,7 @@ void handle_pimatic_ajax()
       String PimaticPassStored = HandleEeprom(pimpass_Address, "read");
 
       // Glue everything together and send to client
-      server.send(200, "text/html", PimaticHostStored + sep + PimaticPortStored + sep + PimaticUserStored + sep + PimaticPassStored + sep + ErrorList[ErrorWifi] + sep + ErrorList[ErrorEeprom] + sep + ErrorList[ErrorDs18b20] + sep + ErrorList[ErrorUpgrade]);
+      server.send(200, "text/html", PimaticHostStored + sep + PimaticPortStored + sep + PimaticUserStored + sep + PimaticPassStored + sep + getErrorString());
     }
     if (form == "pimatic")
     {
